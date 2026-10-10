@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>نظام المحل</title>
+<style>
+:root{--bg:#eef2ef;--card:#fff;--ink:#1c2b26;--mut:#6b7c75;--pri:#0f6b52;--pri2:#0a4d3b;--line:#d8e2dd;--red:#c0392b;--amb:#f3b53f}
+@media(prefers-color-scheme:dark){:root{--bg:#121a17;--card:#1b2622;--ink:#e8f0ec;--mut:#92a69d;--pri:#2fb58c;--pri2:#2fb58c;--line:#2c3a35}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Tahoma,"Segoe UI",Arial,sans-serif;font-size:16px;padding-bottom:70px}
+header{background:var(--pri2);color:#fff;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));font-weight:bold;font-size:18px}
+main{max-width:900px;margin:auto;padding:12px}
+nav{position:fixed;bottom:0;right:0;left:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:5}
+nav button{flex:1;border:0;background:none;padding:12px 4px;font:inherit;font-size:14px;color:var(--mut);cursor:pointer}
+nav button.on{color:var(--pri);font-weight:bold;box-shadow:inset 0 3px 0 var(--pri)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+input,select{width:100%;padding:11px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--bg);color:var(--ink)}
+label{display:block;font-size:13px;color:var(--mut);margin:8px 0 3px}
+.btn{border:0;border-radius:8px;padding:11px 16px;font:inherit;background:var(--pri);color:#fff;cursor:pointer}
+.btn.s{background:var(--line);color:var(--ink)}.btn.d{background:var(--red)}.btn.sm{padding:6px 10px;font-size:14px}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>.fit{flex:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.prod{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center;cursor:pointer}
+.prod b{display:block}.prod small{color:var(--mut)}.prod.low{border-color:var(--amb)}.prod.out{opacity:.45}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{padding:8px 4px;border-bottom:1px solid var(--line);text-align:right}th{color:var(--mut);font-weight:normal;font-size:13px}
+.wrap{overflow-x:auto}
+.total{font-size:26px;font-weight:bold;color:var(--pri)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}.stat{background:var(--bg);border-radius:8px;padding:12px}.stat b{font-size:20px;display:block}
+.warn{color:var(--red)}.mut{color:var(--mut)}
+.q{display:inline-flex;align-items:center;gap:6px}.q button{width:28px;height:28px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:16px}
+#rc{display:none}
+@media print{body>*:not(#rc){display:none!important}#rc{display:block;font-size:13px;width:72mm;color:#000}#rc table td,#rc table th{padding:2px}}
+</style>
+</head>
+<body>
+<header id="hd">نظام المحل</header>
+<main id="app"></main>
+<nav id="nav"></nav>
+<div id="rc"></div>
+<script>
+const KEY='shopSystemV1';
+let S={shop:'محلي',cur:'ج.م',products:[],sales:[],seq:1};
+try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
+let tab='sell',cart=[],q='',edit=null,disc=0,msg='';
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){alert('تعذر الحفظ. صدّر نسخة احتياطية.')}};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const n=v=>(Math.round((+v||0)*100)/100).toLocaleString('en');
+const money=v=>n(v)+' '+esc(S.cur);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const tabs=[['sell','🛒 بيع'],['prods','📦 المنتجات'],['inv','🧾 الفواتير'],['rep','📊 التقارير']];
+function go(t){tab=t;msg='';render()}
+function render(){
+ document.getElementById('hd').textContent=S.shop;
+ document.getElementById('nav').innerHTML=tabs.map(([k,l])=>`<button class="${tab==k?'on':''}" onclick="go('${k}')">${l}</button>`).join('');
+ document.getElementById('app').innerHTML=({sell,prods,inv,rep})[tab]();
+ if(tab=='sell'){const e=document.getElementById('sq');if(e&&q){e.focus();e.setSelectionRange(q.length,q.length)}}
+}
+/* ---------- بيع ---------- */
+function sell(){
+ const k=q.trim().toLowerCase();
+ const list=S.products.filter(p=>!k||p.name.toLowerCase().includes(k)||(p.code&&p.code.toLowerCase()==k));
+ const sub=cart.reduce((a,i)=>a+i.price*i.qty,0),tot=Math.max(0,sub-disc);
+ return `<div class="card"><input id="sq" placeholder="ابحث بالاسم أو اكتب/امسح الباركود ثم Enter" value="${esc(q)}" oninput="q=this.value;render()" onkeydown="if(event.key=='Enter')scan()">
+ <div class="grid" style="margin-top:10px">${list.slice(0,60).map(p=>`<div class="prod ${p.stock<=0?'out':p.stock<=p.min?'low':''}" onclick="add('${p.id}')"><b>${esc(p.name)}</b>${money(p.price)}<br><small>المخزون: ${n(p.stock)}</small></div>`).join('')||'<p class="mut">لا توجد منتجات. أضفها من تبويب المنتجات.</p>'}</div></div>
+ <div class="card"><b>الفاتورة</b>${msg?`<p class="warn">${msg}</p>`:''}
+ ${cart.length?`<div class="wrap"><table>${cart.map((i,x)=>`<tr><td>${esc(i.name)}</td><td><span class="q"><button onclick="qty(${x},1)">+</button>${n(i.qty)}<button onclick="qty(${x},-1)">−</button></span></td><td>${money(i.price*i.qty)}</td><td><button class="btn sm d" onclick="cart.splice(${x},1);render()">✕</button></td></tr>`).join('')}</table></div>
+ <label>خصم (${esc(S.cur)})</label><input type="number" min="0" value="${disc||''}" onchange="disc=+this.value||0;render()">
+ <p>الإجمالي: <span class="total">${money(tot)}</span></p>
+ <div class="row"><button class="btn" onclick="pay(true)">إتمام وطباعة</button><button class="btn s" onclick="pay(false)">إتمام فقط</button><button class="btn s fit" onclick="cart=[];disc=0;render()">مسح</button></div>`:'<p class="mut">اختر منتجاً لإضافته للفاتورة.</p>'}</div>`;
+}
+function scan(){const k=q.trim().toLowerCase();if(!k)return;const p=S.products.find(p=>p.code&&p.code.toLowerCase()==k)||(S.products.filter(p=>p.name.toLowerCase().includes(k)).length==1&&S.products.find(p=>p.name.toLowerCase().includes(k)));if(p){add(p.id);q='';render();document.getElementById('sq').focus()}}
+function add(id){const p=S.products.find(p=>p.id==id);if(!p)return;const c=cart.find(i=>i.id==id);const have=c?c.qty:0;msg='';
+ if(have+1>p.stock){msg='الكمية المطلوبة أكبر من المخزون: '+esc(p.name);render();return}
+ c?c.qty++:cart.push({id,name:p.name,price:p.price,cost:p.cost,qty:1});render()}
+function qty(x,d){const i=cart[x],p=S.products.find(p=>p.id==i.id);i.qty+=d;if(i.qty<=0)cart.splice(x,1);else if(p&&i.qty>p.stock){i.qty=p.stock;msg='وصلت لأقصى كمية متاحة'}render()}
+function pay(pr){if(!cart.length)return;
+ const sub=cart.reduce((a,i)=>a+i.price*i.qty,0),tot=Math.max(0,sub-disc),cost=cart.reduce((a,i)=>a+i.cost*i.qty,0);
+ const s={id:S.seq++,date:new Date().toISOString(),items:cart.map(i=>({...i})),sub,disc,total:tot,profit:tot-cost};
+ cart.forEach(i=>{const p=S.products.find(p=>p.id==i.id);if(p)p.stock-=i.qty});
+ S.sales.unshift(s);save();cart=[];disc=0;q='';msg='تم حفظ الفاتورة رقم '+s.id;if(pr)receipt(s);render()}
+function receipt(s){const d=new Date(s.date).toLocaleString('ar-EG');
+ document.getElementById('rc').innerHTML=`<h3 style="text-align:center;margin:0">${esc(S.shop)}</h3><p style="text-align:center;margin:2px">فاتورة #${s.id}<br>${d}</p><table>${s.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${n(i.qty)}×${n(i.price)}</td><td>${n(i.qty*i.price)}</td></tr>`).join('')}</table><hr>${s.disc?`<p>خصم: ${n(s.disc)}</p>`:''}<h3>الإجمالي: ${money(s.total)}</h3><p style="text-align:center">شكراً لزيارتكم</p>`;
+ if(isNative()){const t=S.shop+'\nفاتورة #'+s.id+'\n'+d+'\n----------\n'+s.items.map(i=>i.name+'  '+n(i.qty)+' × '+n(i.price)+' = '+n(i.qty*i.price)).join('\n')+'\n----------\n'+(s.disc?'خصم: '+n(s.disc)+'\n':'')+'الإجمالي: '+n(s.total)+' '+S.cur;window.Capacitor.Plugins.Share.share({title:'فاتورة',text:t}).catch(()=>{});return}
+ setTimeout(()=>window.print(),100)}
+/* ---------- منتجات ---------- */
+function prods(){const e=edit||{};
+ return `<div class="card"><b>${e.id?'تعديل منتج':'إضافة منتج'}</b>
+ <label>الاسم</label><input id="pn" value="${esc(e.name)}">
+ <label>الباركود (اختياري)</label><input id="pc" value="${esc(e.code)}">
+ <div class="row"><div><label>سعر الشراء</label><input id="pcost" type="number" min="0" value="${e.cost??''}"></div><div><label>سعر البيع</label><input id="pp" type="number" min="0" value="${e.price??''}"></div></div>
+ <div class="row"><div><label>الكمية بالمخزون</label><input id="ps" type="number" min="0" value="${e.stock??''}"></div><div><label>حد التنبيه</label><input id="pm" type="number" min="0" value="${e.min??5}"></div></div>
+ <p class="warn">${msg}</p><div class="row"><button class="btn" onclick="saveP()">حفظ</button>${e.id?'<button class="btn s" onclick="edit=null;render()">إلغاء</button>':''}</div></div>
+ <div class="card wrap"><table><tr><th>المنتج</th><th>البيع</th><th>المخزون</th><th></th></tr>${S.products.map(p=>`<tr><td>${esc(p.name)}</td><td>${n(p.price)}</td><td class="${p.stock<=p.min?'warn':''}">${n(p.stock)}</td><td><button class="btn sm s" onclick="edit=S.products.find(x=>x.id=='${p.id}');msg='';render();scrollTo(0,0)">تعديل</button> <button class="btn sm d" onclick="delP('${p.id}')">حذف</button></td></tr>`).join('')||'<tr><td colspan="4" class="mut">لا توجد منتجات بعد.</td></tr>'}</table></div>`}
+function saveP(){const g=i=>document.getElementById(i).value;const name=g('pn').trim();
+ if(!name||g('pp')===''){msg='اكتب اسم المنتج وسعر البيع';render();return}
+ const o={name,code:g('pc').trim(),cost:+g('pcost')||0,price:+g('pp')||0,stock:+g('ps')||0,min:+g('pm')||0};
+ if(edit&&edit.id)Object.assign(edit,o);else S.products.push({id:uid(),...o});
+ save();edit=null;msg='';render()}
+function delP(id){if(confirm('حذف المنتج؟')){S.products=S.products.filter(p=>p.id!=id);save();render()}}
+/* ---------- فواتير ---------- */
+function inv(){return `<div class="card wrap"><table><tr><th>#</th><th>التاريخ</th><th>الإجمالي</th><th></th></tr>${S.sales.slice(0,200).map(s=>`<tr><td>${s.id}</td><td>${new Date(s.date).toLocaleString('ar-EG',{dateStyle:'short',timeStyle:'short'})}</td><td>${money(s.total)}</td><td><button class="btn sm s" onclick="receipt(S.sales.find(x=>x.id==${s.id}))">طباعة</button> <button class="btn sm d" onclick="ret(${s.id})">إلغاء</button></td></tr>`).join('')||'<tr><td colspan="4" class="mut">لا توجد فواتير بعد.</td></tr>'}</table></div>`}
+function ret(id){if(!confirm('إلغاء الفاتورة وإرجاع الكميات للمخزون؟'))return;const s=S.sales.find(x=>x.id==id);s.items.forEach(i=>{const p=S.products.find(p=>p.id==i.id);if(p)p.stock+=i.qty});S.sales=S.sales.filter(x=>x.id!=id);save();render()}
+/* ---------- تقارير ---------- */
+function rep(){const now=new Date(),td=now.toDateString(),mo=now.getMonth()+'-'+now.getFullYear();
+ const sum=f=>S.sales.filter(f).reduce((a,s)=>({t:a.t+s.total,p:a.p+s.profit,c:a.c+1}),{t:0,p:0,c:0});
+ const d=sum(s=>new Date(s.date).toDateString()==td),m=sum(s=>{const x=new Date(s.date);return x.getMonth()+'-'+x.getFullYear()==mo});
+ const low=S.products.filter(p=>p.stock<=p.min);
+ const val=S.products.reduce((a,p)=>a+p.cost*p.stock,0);
+ return `<div class="card"><b>اليوم</b><div class="stats" style="margin-top:8px"><div class="stat">المبيعات<b>${money(d.t)}</b></div><div class="stat">الربح<b>${money(d.p)}</b></div><div class="stat">عدد الفواتير<b>${d.c}</b></div><div class="stat">قيمة المخزون<b>${money(val)}</b></div></div>
+ <p><b>الشهر:</b> مبيعات ${money(m.t)} — ربح ${money(m.p)} — ${m.c} فاتورة</p></div>
+ <div class="card"><b>نواقص المخزون</b>${low.length?'<ul>'+low.map(p=>`<li>${esc(p.name)} — متبقي ${n(p.stock)}</li>`).join('')+'</ul>':'<p class="mut">لا توجد نواقص.</p>'}</div>
+ <div class="card"><b>الإعدادات والنسخ الاحتياطي</b>
+ <label>اسم المحل</label><input value="${esc(S.shop)}" onchange="S.shop=this.value||'محلي';save();render()">
+ <label>العملة</label><input value="${esc(S.cur)}" onchange="S.cur=this.value;save();render()">
+ <p class="mut">البيانات محفوظة على هذا الجهاز. خذ نسخة احتياطية بانتظام، ويمكنك نقلها لجهاز آخر.</p>
+ <div class="row"><button class="btn" onclick="exp()">تصدير نسخة</button><button class="btn s" onclick="document.getElementById('fi').click()">استيراد نسخة</button></div>
+ <input id="fi" type="file" accept=".json" hidden onchange="imp(this.files[0])">
+ <p><button class="btn d sm" onclick="if(confirm('مسح كل البيانات نهائياً؟')){localStorage.removeItem(KEY);location.reload()}">مسح كل البيانات</button></p></div>`}
+const isNative=()=>window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform();
+async function exp(){const name='backup-'+new Date().toISOString().slice(0,10)+'.json',txt=JSON.stringify(S);
+ if(isNative()){try{const P=window.Capacitor.Plugins;const r=await P.Filesystem.writeFile({path:name,data:txt,directory:'CACHE',encoding:'utf8'});await P.Share.share({title:name,url:r.uri})}catch(e){alert('تعذر التصدير')}return}
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));a.download=name;a.click()}
+function imp(f){if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.products))throw 0;if(confirm('سيتم استبدال البيانات الحالية. متابعة؟')){S=Object.assign(S,d);save();render()}}catch(e){alert('ملف غير صالح')}};r.readAsText(f)}
+render();
+</script>
+</body>
+</html>
